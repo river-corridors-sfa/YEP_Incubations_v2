@@ -1,0 +1,7 @@
+"Parameter","Test","Moisture","p_all_readings","p_DO_above_2","changed_at_0.05"
+"Vmax_mg_kg_h","Mann-Whitney, dry vs wet (treatments pooled)","Dry vs Wet",3.39182139086347e-06,3.39182139086347e-06,FALSE
+"Vmax_mg_kg_h","Kruskal-Wallis, DOM treatments","Dry",0.0626620047421534,0.0626620047421534,FALSE
+"Vmax_mg_kg_h","Kruskal-Wallis, DOM treatments","Wet",0.565525438699539,0.3945537103716,FALSE
+"kL_L_kg_h","Mann-Whitney, dry vs wet (treatments pooled)","Dry vs Wet",9.57561954527704e-07,9.57561954527704e-07,FALSE
+"kL_L_kg_h","Kruskal-Wallis, DOM treatments","Dry",0.367879441171442,0.367879441171442,FALSE
+"kL_L_kg_h","Kruskal-Wallis, DOM treatments","Wet",0.0177743299536594,0.280831621778381,TRUE

@@ -1,0 +1,7 @@
+Moisture,Treatment,n_samples
+Dry,Control,5
+Dry,Unburned + DOC,5
+Dry,High Burn + DOC,5
+Wet,Control,5
+Wet,Unburned + DOC,4
+Wet,High Burn + DOC,4
