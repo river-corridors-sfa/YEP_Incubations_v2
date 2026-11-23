@@ -15,7 +15,9 @@
 #       * DOM treatment within previously dry and within wet sediments
 #       permutations restricted within incubation day (strata)
 #     followed by pairwise distance-based Welch tests (Tw2; Alekseyenko 2016,
-#     Bioinformatics 32:3552-3558) with Holm correction
+#     Bioinformatics 32:3552-3558), unadjusted and interpreted only when the
+#     Wd* test for that inundation history is significant (same approach as
+#     Dunn's tests after Kruskal-Wallis)
 #   - dispersion (betadisper / PERMDISP), reported alongside the Wd* tests
 #   - mean Bray-Curtis dissimilarity of each wet treatment to the previously dry
 #     samples (used in the Results text)
@@ -245,19 +247,30 @@ print(wds_tests)
 write_csv(wds_tests, file.path(out_dir, "fticr_wds_tests.csv"))
 
 # Pairwise comparisons among DOM treatments: distance-based Welch test (Tw2)
-# for every pair of treatments within each inundation history, Holm-adjusted
-# within each history (3 comparisons). Note: Tw2 permutations are not
-# stratified by day (the function does not support strata).
+# for every pair of treatments within each inundation history. As for Dunn's
+# tests elsewhere in the paper, p values are not adjusted and pairs are
+# interpreted only when the Wd* test for that history is significant
+# (p < 0.05); with three groups this protected approach controls the overall
+# error rate. Note: Tw2 permutations are not stratified by day (the function
+# does not support strata). With 4-5 samples per group, the smallest possible
+# Tw2 p value is about 0.008.
 tw2_pairwise <- tibble()
 for (mo in c("Dry", "Wet")) {
   s_info <- sample_info %>% filter(Moisture == mo)
-  dm <- as.dist(bc_mat[s_info$Sample_Name, s_info$Sample_Name])
-  set.seed(123)
-  pw <- Tw2.posthoc.tests(dm, droplevels(s_info$Treatment), nrep = n_perm)
-  tw2_pairwise <- bind_rows(tw2_pairwise, as_tibble(pw) %>%
-    mutate(Moisture = mo, across(c(N1, N2, p.value, tw2.stat, nrep), as.numeric)) %>%
-    mutate(p_holm = p.adjust(p.value, method = "holm")) %>%
-    relocate(Moisture))
+  trt <- droplevels(s_info$Treatment)
+  wds_p <- wds_tests$p[wds_tests$Test == paste0("DOM treatment, ",
+                         ifelse(mo == "Dry", "previously dry", "wet"))]
+  for (pair in combn(levels(trt), 2, simplify = FALSE)) {
+    keep_s <- trt %in% pair
+    dm <- as.dist(bc_mat[s_info$Sample_Name[keep_s], s_info$Sample_Name[keep_s]])
+    set.seed(123)
+    tw <- Tw2.test(dm, droplevels(trt[keep_s]), nrep = n_perm)
+    tw2_pairwise <- bind_rows(tw2_pairwise, tibble(
+      Moisture = mo, Treatment_1 = pair[1], Treatment_2 = pair[2],
+      n_1 = sum(trt == pair[1]), n_2 = sum(trt == pair[2]),
+      Tw2 = unname(tw$statistic), p = tw$p.value, n_perm = n_perm,
+      WdS_p = wds_p, significant = wds_p < 0.05 & tw$p.value < 0.05))
+  }
 }
 print(tw2_pairwise)
 write_csv(tw2_pairwise, file.path(out_dir, "fticr_tw2_pairwise.csv"))
