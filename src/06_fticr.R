@@ -1,26 +1,48 @@
 # =============================================================================
-# 06_fticr.R -- FTICR-MS: NMDS, PERMANOVA, dispersion, aromaticity (Fig. 2)
+# 06_fticr.R -- FTICR-MS: NMDS, Wd* tests, dispersion, AI_mod and NOSC (Fig. 2)
 # -----------------------------------------------------------------------------
-# Post-incubation aqueous samples (SIR), presence/absence of molecular formulas.
-#   - NMDS on Jaccard distance (Fig. 2)
-#   - PERMANOVA across all samples (inundation history, treatment, day, and
-#     the history x treatment interaction)
-#   - PERMANOVA (Treatment + Incubation_Day) within dry and within wet
-#   - betadisper: are group dispersions equal? (PERMANOVA assumes they are)
-#   - aromaticity and oxidation state per sample (table)
-#   - Figure 2: (a) mean AI_mod and (b) mean NOSC by DOM treatment within each
+# Post-incubation aqueous samples (SIR). All analyses are intensity weighted:
+# peak intensities are converted to relative intensities within each sample
+# (each sample sums to 1).
+#   - Bray-Curtis dissimilarity on Hellinger-transformed relative intensities
+#     (square root of relative intensity)
+#   - NMDS on Bray-Curtis dissimilarity (Fig. 2)
+#   - group differences in composition (location/centroid): distance-based
+#     multivariate Welch ANOVA, Wd* test (Hamidi et al. 2019, Microbiome 7:51),
+#     which is robust to unequal dispersion and unequal group sizes. Used
+#     instead of PERMANOVA because wet-sediment treatments differ in dispersion.
+#       * inundation history (all samples)
+#       * DOM treatment within previously dry and within wet sediments
+#       permutations restricted within incubation day (strata)
+#     followed by pairwise distance-based Welch tests (Tw2; Alekseyenko 2016,
+#     Bioinformatics 32:3552-3558) with Holm correction
+#   - dispersion (betadisper / PERMDISP), reported alongside the Wd* tests
+#   - mean Bray-Curtis dissimilarity of each wet treatment to the previously dry
+#     samples (used in the Results text)
+#   - intensity-weighted mean AI_mod and NOSC per sample (table)
+#   - Figure 2: (a) AI_mod and (b) NOSC by DOM treatment within each
 #     history (Kruskal-Wallis, Dunn letters), (c) NMDS
 # Note: YEP2A_SIR-S2 and YEP2B_SIR-S3 were reacquired at 0.2 s ion
 #   accumulation (low signal at 0.075 s); the processed data package contains
 #   only the 0.2 s spectra for these two samples, so no special handling here.
+# Formula filters (applied before all analyses; see "Filter Formulas"):
+#   1) blank removal: formulas detected in > 50% of the methanol SPE process
+#      blanks are removed (data package readme, note 11);
+#   2) mass window: only formulas with 200 <= m/z <= 900 are kept (the
+#      processed data package was filtered at 100-1000 m/z).
 #
 # Inputs : data_files$fticr_data, data_files$fticr_mol, data_files$sample_metadata
 # Outputs: outputs/figures/Fig2_FTICR.pdf/.png  (replaces Fig2_FTICR_NMDS)
-#          outputs/fticr/*.csv  (incl. fticr_chemistry_tests.csv)
+#          outputs/fticr/fticr_formula_filter_log.csv, fticr_formula_filter_per_sample.csv,
+#          fticr_sample_counts.csv, fticr_nmds_site_scores.csv,
+#          fticr_wds_tests.csv, fticr_tw2_pairwise.csv, fticr_betadisper.csv,
+#          fticr_mean_distance_to_dry.csv, fticr_chemistry_per_sample.csv,
+#          fticr_chemistry_by_group.csv, fticr_chemistry_tests.csv
 # =============================================================================
 
 library(tidyverse)
 library(vegan)
+library(WdStar)   # Wd* and Tw2 tests; install with remotes::install_github("alekseyenko/WdStar")
 
 # Setup ----
 set.seed(123)
@@ -68,46 +90,100 @@ metadata <- read_csv(metadata_file, show_col_types = FALSE, trim_ws = TRUE) %>%
 ## Read FTICR data (rows = molecules, columns = samples)
 fticr_raw <- read_csv(fticr_file, show_col_types = FALSE, trim_ws = TRUE)
 
+## Read molecular formula information (rows match the Data file)
+mol <- read_csv(mol_file, show_col_types = FALSE)
+stopifnot(nrow(mol) == nrow(fticr_raw), all(abs(mol$Calibrated_Mass - fticr_raw$Calibrated_Mass) < 1e-6))
 
-# Create Presence/Absence Matrix ----
+
+# Filter Formulas ----
+# 1) Blank removal: remove formulas detected in more than half of the methanol
+#    SPE process blanks (>= 3 of 4), as recommended in the data package readme
+#    (note 11). No blank subtraction was done in the processed data package.
+# 2) Mass window: keep formulas with 200 <= m/z <= 900, the reliable m/z
+#    window. The processed data package was filtered at 100-1000 m/z.
+
+## Blank columns and number of blanks in which each formula was detected
+blank_cols <- grep("MeOH_blank", names(fticr_raw), value = TRUE)
+stopifnot(length(blank_cols) == 4)
+n_blank_detected <- rowSums(fticr_raw[blank_cols] > 0, na.rm = TRUE)
+in_blanks <- n_blank_detected > length(blank_cols) / 2
+
+## Mass window
+in_window <- fticr_raw$Calibrated_Mass >= 200 & fticr_raw$Calibrated_Mass <= 900
+
+## Formulas kept: not in blanks and inside the mass window
+keep <- !in_blanks & in_window
+
+## Log of formulas removed by each filter (whole dataset)
+filter_log <- tibble(
+  Step = c("Formulas in processed data package",
+           "Detected in > 50% of methanol blanks",
+           "Outside 200-900 m/z",
+           "Removed by either filter",
+           "Formulas kept"),
+  n_formulas = c(nrow(fticr_raw), sum(in_blanks), sum(!in_window),
+                 sum(!keep), sum(keep)))
+print(filter_log)
+write_csv(filter_log, file.path(out_dir, "fticr_formula_filter_log.csv"))
+
+## Formulas per sample before and after filtering
+sample_cols_all <- setdiff(names(fticr_raw), c("Calibrated_Mass", blank_cols))
+filter_per_sample <- tibble(
+  Sample_Name = sample_cols_all,
+  n_formulas_before = colSums(fticr_raw[sample_cols_all] > 0, na.rm = TRUE),
+  n_removed_blanks = colSums(fticr_raw[in_blanks, sample_cols_all] > 0, na.rm = TRUE),
+  n_removed_mass = colSums(fticr_raw[!in_window, sample_cols_all] > 0, na.rm = TRUE),
+  n_formulas_after = colSums(fticr_raw[keep, sample_cols_all] > 0, na.rm = TRUE)) %>%
+  mutate(pct_removed = round(100 * (1 - n_formulas_after / n_formulas_before), 1))
+print(filter_per_sample, n = Inf)
+write_csv(filter_per_sample, file.path(out_dir, "fticr_formula_filter_per_sample.csv"))
+
+## Apply the filter to both files (keeps their rows aligned) and drop the blanks
+fticr_raw <- fticr_raw[keep, ] %>% select(-all_of(blank_cols))
+mol <- mol[keep, ]
+stopifnot(nrow(mol) == nrow(fticr_raw), all(abs(mol$Calibrated_Mass - fticr_raw$Calibrated_Mass) < 1e-6))
+
+
+# Create Intensity Matrix ----
 
 ## Extract sample columns (exclude mass column)
 sample_cols <- setdiff(names(fticr_raw), "Calibrated_Mass")
 
-## Convert to presence/absence (1 if detected, 0 if not)
-pa_matrix <- fticr_raw %>%
+## Peak intensities (0 = not detected); rows = samples, columns = formulas
+int_matrix <- fticr_raw %>%
   select(all_of(sample_cols)) %>%
-  mutate(across(everything(), ~as.numeric(. > 0 & !is.na(.)))) %>%
+  mutate(across(everything(), ~replace_na(., 0))) %>%
   as.matrix() %>%
-  t()  # Transpose: rows = samples, columns = molecules
+  t()
 
-rownames(pa_matrix) <- sample_cols
-colnames(pa_matrix) <- paste0("mol_", seq_len(nrow(fticr_raw)))
+rownames(int_matrix) <- sample_cols
+colnames(int_matrix) <- paste0("mol_", seq_len(nrow(fticr_raw)))
 
 
 # Filter Samples ----
 
 ## Keep only target samples with complete metadata
-sample_info <- tibble(Sample_Name = rownames(pa_matrix)) %>%
+sample_info <- tibble(Sample_Name = rownames(int_matrix)) %>%
   left_join(metadata, by = "Sample_Name") %>%
   filter(
     Sample_Material == target_sample_type,
     !is.na(Treatment), !is.na(Moisture), !is.na(Incubation_Day)
   )
 
-## Filter presence/absence matrix to match
-pa_matrix <- pa_matrix[sample_info$Sample_Name, , drop = FALSE]
+## Filter intensity matrix to match
+int_matrix <- int_matrix[sample_info$Sample_Name, , drop = FALSE]
 
-## Remove molecules never detected & samples with no detections
-pa_matrix <- pa_matrix[, colSums(pa_matrix) > 0, drop = FALSE]
-pa_matrix <- pa_matrix[rowSums(pa_matrix) > 0, , drop = FALSE]
+## Keep formula columns aligned with mol (formulas absent from every target
+## sample have zero relative intensity and do not affect any result)
+stopifnot(all(rowSums(int_matrix) > 0))
+stopifnot(identical(sample_info$Sample_Name, rownames(int_matrix)))
 
-## Update sample info to match filtered matrix
-sample_info <- sample_info %>%
-  filter(Sample_Name %in% rownames(pa_matrix)) %>%
-  arrange(match(Sample_Name, rownames(pa_matrix)))
+## Relative intensity within each sample (each row sums to 1)
+rel_matrix <- int_matrix / rowSums(int_matrix)
 
-stopifnot(identical(sample_info$Sample_Name, rownames(pa_matrix)))
+## Hellinger transformation (square root of relative intensity), which
+## down-weights the most intense peaks before computing Bray-Curtis
+hel_matrix <- sqrt(rel_matrix)
 
 ## Number of samples per group (Fig. 2 caption)
 sample_counts <- sample_info %>% count(Moisture, Treatment, name = "n_samples")
@@ -117,12 +193,12 @@ write_csv(sample_counts, file.path(out_dir, "fticr_sample_counts.csv"))
 
 # Run NMDS Ordination ----
 
-## Calculate Jaccard distance (presence/absence similarity)
-dist_jaccard <- vegdist(pa_matrix, method = "jaccard", binary = TRUE)
+## Bray-Curtis dissimilarity on Hellinger-transformed relative intensities
+dist_bc <- vegdist(hel_matrix, method = "bray")
 
 ## Run NMDS to create 2D representation
-nmds <- metaMDS(pa_matrix, distance = "jaccard", binary = TRUE, k = 2, 
-                trymax = 200, autotransform = FALSE, trace = FALSE)
+set.seed(123)
+nmds <- metaMDS(dist_bc, k = 2, trymax = 200, trace = FALSE)
 
 ## Extract sample coordinates and add metadata
 site_scores <- scores(nmds, display = "sites") %>%
@@ -130,105 +206,121 @@ site_scores <- scores(nmds, display = "sites") %>%
   rownames_to_column("Sample_Name") %>%
   left_join(sample_info, by = "Sample_Name")
 
-write_csv(site_scores, file.path(out_dir, "fticr_pa_nmds_site_scores.csv"))
+write_csv(site_scores, file.path(out_dir, "fticr_nmds_site_scores.csv"))
 
 
-# Statistical Testing: PERMANOVA ----
-# Test if treatments differ significantly, separately for dry and wet samples
+# Group differences in composition: Wd* tests ----
+# PERMANOVA's pseudo-F can be significant when groups differ only in spread
+# (dispersion), and the wet-sediment treatments differ in spread (see
+# betadisper below). The Wd* test compares group centroids while accounting for
+# unequal dispersion and unequal group sizes. Permutations are restricted
+# within incubation day (strata) so that day differences do not drive the
+# result. Tests:
+#   1) inundation history, all samples
+#   2) DOM treatment within previously dry sediments
+#   3) DOM treatment within wet sediments
+n_perm <- 9999
+bc_mat <- as.matrix(dist_bc)
 
-run_permanova <- function(moisture_level) {
-  # Subset data for this moisture level
-  samples_subset <- sample_info %>% filter(Moisture == moisture_level)
-  dist_subset <- as.dist(as.matrix(dist_jaccard)[samples_subset$Sample_Name, 
-                                                 samples_subset$Sample_Name])
-  
-  # Run PERMANOVA
+run_wds <- function(samples, group_var, label) {
+  s_info <- sample_info %>% filter(Sample_Name %in% samples)
+  dm <- as.dist(bc_mat[s_info$Sample_Name, s_info$Sample_Name])
   set.seed(123)
-  adonis2(dist_subset ~ Treatment + Incubation_Day, 
-          data = samples_subset, permutations = 9999, by = "margin")
+  w <- WdS.test(dm, group = droplevels(s_info[[group_var]]), nrep = n_perm,
+                strata = droplevels(s_info$Incubation_Day))
+  tibble(Test = label, Grouping = group_var, n_samples = nrow(s_info),
+         n_groups = nlevels(droplevels(s_info[[group_var]])),
+         WdS = unname(w$statistic), omega_squared = unname(w$estimate),
+         p = w$p.value, n_perm = n_perm, strata = "Incubation_Day")
 }
 
-## Run for dry and wet separately
-dry_permanova <- run_permanova("Dry")
-wet_permanova <- run_permanova("Wet")
+dry_samples <- sample_info$Sample_Name[sample_info$Moisture == "Dry"]
+wet_samples <- sample_info$Sample_Name[sample_info$Moisture == "Wet"]
 
-## Save full results
-write_csv(as.data.frame(dry_permanova) %>% rownames_to_column("Term"),
-          file.path(out_dir, "fticr_pa_permanova_dry_only.csv"))
-write_csv(as.data.frame(wet_permanova) %>% rownames_to_column("Term"),
-          file.path(out_dir, "fticr_pa_permanova_wet_only.csv"))
+wds_tests <- bind_rows(
+  run_wds(sample_info$Sample_Name, "Moisture", "Inundation history (all samples)"),
+  run_wds(dry_samples, "Treatment", "DOM treatment, previously dry"),
+  run_wds(wet_samples, "Treatment", "DOM treatment, wet"))
+print(wds_tests)
+write_csv(wds_tests, file.path(out_dir, "fticr_wds_tests.csv"))
 
-
-# Statistical Testing: PERMANOVA across all samples ----
-# Does composition differ between dry and wet sediments, and among treatments,
-# when all samples are analyzed together?
-#   Model 1 (main effects): each of inundation history, treatment and day is
-#     tested while accounting for the other two (marginal tests).
-#   Model 2: adds the history x treatment interaction, i.e. whether the
-#     treatment effect differs between dry and wet sediments. Only the
-#     interaction row is kept from this model.
-stopifnot(identical(labels(dist_jaccard), sample_info$Sample_Name))   # same sample order
-
-set.seed(123)
-overall_main <- adonis2(dist_jaccard ~ Moisture + Treatment + Incubation_Day,
-                        data = sample_info, permutations = 9999, by = "margin")
-set.seed(123)
-overall_interaction <- adonis2(dist_jaccard ~ Moisture * Treatment + Incubation_Day,
-                               data = sample_info, permutations = 9999, by = "margin")
-
-overall_permanova <- bind_rows(
-  as.data.frame(overall_main) %>% rownames_to_column("Term") %>%
-    mutate(Model = "Moisture + Treatment + Incubation_Day"),
-  as.data.frame(overall_interaction) %>% rownames_to_column("Term") %>%
-    filter(Term == "Moisture:Treatment") %>%
-    mutate(Model = "Moisture * Treatment + Incubation_Day")) %>%
-  mutate(n_samples = nrow(sample_info)) %>%
-  relocate(Model, n_samples)
-print(overall_permanova)
-write_csv(overall_permanova, file.path(out_dir, "fticr_pa_permanova_overall.csv"))
+# Pairwise comparisons among DOM treatments: distance-based Welch test (Tw2)
+# for every pair of treatments within each inundation history, Holm-adjusted
+# within each history (3 comparisons). Note: Tw2 permutations are not
+# stratified by day (the function does not support strata).
+tw2_pairwise <- tibble()
+for (mo in c("Dry", "Wet")) {
+  s_info <- sample_info %>% filter(Moisture == mo)
+  dm <- as.dist(bc_mat[s_info$Sample_Name, s_info$Sample_Name])
+  set.seed(123)
+  pw <- Tw2.posthoc.tests(dm, droplevels(s_info$Treatment), nrep = n_perm)
+  tw2_pairwise <- bind_rows(tw2_pairwise, as_tibble(pw) %>%
+    mutate(Moisture = mo, across(c(N1, N2, p.value, tw2.stat, nrep), as.numeric)) %>%
+    mutate(p_holm = p.adjust(p.value, method = "holm")) %>%
+    relocate(Moisture))
+}
+print(tw2_pairwise)
+write_csv(tw2_pairwise, file.path(out_dir, "fticr_tw2_pairwise.csv"))
 
 
-# Dispersion test (betadisper) ----
-# PERMANOVA can report a group difference when groups differ only in spread.
-# betadisper tests whether the spread (distance to group centroid) differs
-# among treatments, within dry and within wet.
+# Dispersion test (betadisper / PERMDISP) ----
+# Tests whether the spread (distance to group centroid) differs among groups.
+# Reported with the Wd* tests: Wd* tests differences in location (centroids);
+# betadisper tests differences in spread.
+#   - between inundation histories (all samples)
+#   - among DOM treatments within previously dry and within wet sediments
 dispersion <- tibble()
+bd <- betadisper(dist_bc, sample_info$Moisture)
+set.seed(123)
+bd_test <- permutest(bd, permutations = 9999)
+dispersion <- bind_rows(dispersion, tibble(
+  Comparison = "Inundation history (all samples)", Group = names(bd$group.distances),
+  Mean_distance_to_centroid = as.numeric(bd$group.distances),
+  F = bd_test$tab$F[1], p = bd_test$tab$`Pr(>F)`[1]))
 for (mo in c("Dry", "Wet")) {
   samples_subset <- sample_info %>% filter(Moisture == mo)
-  dist_subset <- as.dist(as.matrix(dist_jaccard)[samples_subset$Sample_Name,
-                                                 samples_subset$Sample_Name])
-  bd <- betadisper(dist_subset, samples_subset$Treatment)
+  dist_subset <- as.dist(bc_mat[samples_subset$Sample_Name, samples_subset$Sample_Name])
+  bd <- betadisper(dist_subset, droplevels(samples_subset$Treatment))
   set.seed(123)
   bd_test <- permutest(bd, permutations = 9999)
   dispersion <- bind_rows(dispersion, tibble(
-    Moisture = mo, Treatment = names(bd$group.distances),
+    Comparison = paste("DOM treatment,", ifelse(mo == "Dry", "previously dry", "wet")),
+    Group = names(bd$group.distances),
     Mean_distance_to_centroid = as.numeric(bd$group.distances),
     F = bd_test$tab$F[1], p = bd_test$tab$`Pr(>F)`[1]))
 }
 print(dispersion)
-write_csv(dispersion, file.path(out_dir, "fticr_pa_betadisper.csv"))
+write_csv(dispersion, file.path(out_dir, "fticr_betadisper.csv"))
+
+
+# Mean dissimilarity to previously dry samples ----
+# Used in the Results to ask whether a DOM treatment shifted wet-sediment DOM
+# toward the composition of previously dry sediments. For each group, the mean
+# Bray-Curtis dissimilarity between its samples and all previously dry samples
+# (for the previously dry group itself: the mean among previously dry samples).
+distance_to_dry <- sample_info %>%
+  group_by(Moisture, Treatment) %>%
+  summarize(Samples = list(Sample_Name), .groups = "drop") %>%
+  bind_rows(tibble(Moisture = factor("Dry", levels = levels(sample_info$Moisture)),
+                   Treatment = NA, Samples = list(dry_samples))) %>%
+  rowwise() %>%
+  mutate(Mean_BC_to_dry = {
+    d <- bc_mat[Samples, dry_samples, drop = FALSE]
+    mean(d[outer(Samples, dry_samples, "!=")])
+  }) %>%
+  ungroup() %>%
+  mutate(Group = ifelse(is.na(Treatment), "All previously dry", paste(Moisture, Treatment))) %>%
+  select(Group, Moisture, Treatment, Mean_BC_to_dry)
+print(distance_to_dry)
+write_csv(distance_to_dry, file.path(out_dir, "fticr_mean_distance_to_dry.csv"))
 
 
 # Create Plot Labels ----
 
-## Extract treatment effect statistics
-extract_treatment_stats <- function(permanova_result, moisture_name) {
-  as.data.frame(permanova_result) %>%
-    rownames_to_column("Term") %>%
-    filter(Term == "Treatment") %>%
-    mutate(Moisture = moisture_name)
-}
-
-permanova_stats <- bind_rows(
-  extract_treatment_stats(dry_permanova, "Dry"),
-  extract_treatment_stats(wet_permanova, "Wet")
-) %>%
-  mutate(
-    p_text = case_when(
-      `Pr(>F)` < 0.001 ~ "< 0.001",
-      TRUE ~ paste0("= ", sprintf("%.3f", `Pr(>F)`))
-    )
-  )
+## Wd* results for the treatment tests (shown on the NMDS)
+wds_label <- wds_tests %>%
+  filter(Grouping == "Treatment") %>%
+  mutate(p_text = case_when(p < 0.001 ~ "< 0.001", TRUE ~ paste0("= ", sprintf("%.3f", p))))
 
 ## Create text labels for plot
 plot_labels <- tibble(
@@ -236,10 +328,8 @@ plot_labels <- tibble(
   y = max(site_scores$NMDS2) - c(0.06, 0.12, 0.18) * diff(range(site_scores$NMDS2)),
   label = c(
     sprintf("NMDS stress = %.2f", nmds$stress),
-    sprintf("Dry PERMANOVA: R\u00b2 = %.2f, p %s", 
-            permanova_stats$R2[1], permanova_stats$p_text[1]),
-    sprintf("Wet PERMANOVA: R\u00b2 = %.2f, p %s", 
-            permanova_stats$R2[2], permanova_stats$p_text[2])
+    sprintf("Previously dry, Wd* test: p %s", wds_label$p_text[1]),
+    sprintf("Wet, Wd* test: p %s", wds_label$p_text[2])
   )
 )
 
@@ -264,43 +354,38 @@ print(nmds_plot)
 # Saved below as panel (c) of the combined Figure 2 (see "Figure 2")
 
 
-# Aromaticity and oxidation state per sample ----
-# Uses the formulas present in each sample (presence/absence, not weighted by
-# intensity). AI_Mod and NOSC come from the Mol file (rows match the Data file)
-# and follow the standard formulas:
+# Intensity-weighted AI_mod and NOSC per sample ----
+# For each sample, AI_mod and NOSC of the formulas are averaged using their
+# relative intensities as weights (sum of relative intensity x value).
+# AI_Mod and NOSC come from the Mol file (rows match the Data file) and follow
+# the standard formulas:
 #   AI_mod = (1 + C - 0.5*O - S - 0.5*(N + P + H)) / (C - 0.5*O - S - N - P),
 #            set to 0 when the numerator or denominator is <= 0 (Koch & Dittmar 2006, 2016)
 #   NOSC   = 4 - (4*C + H - 3*N - 2*O + 5*P - 2*S) / C (Riedel et al. 2012)
-# Classes: condensed aromatic AI_mod >= 0.67; aromatic 0.5 < AI_mod < 0.67.
-mol <- read_csv(mol_file, show_col_types = FALSE)
-stopifnot(nrow(mol) == nrow(fticr_raw), all(abs(mol$Calibrated_Mass - fticr_raw$Calibrated_Mass) < 1e-6))
+# mol was read and filtered together with fticr_raw (see "Filter Formulas").
+stopifnot(nrow(mol) == ncol(rel_matrix))
 
-aromaticity <- tibble()
-for (s in sample_info$Sample_Name) {
-  present <- !is.na(fticr_raw[[s]]) & fticr_raw[[s]] > 0
-  aromaticity <- bind_rows(aromaticity, tibble(
-    Sample_Name = s,
-    n_formulas = sum(present),
-    AI_mod_mean = mean(mol$AI_Mod[present]),
-    NOSC_mean = mean(mol$NOSC[present]),
-    Pct_condensed_aromatic = 100 * mean(mol$AI_Mod[present] >= 0.67),
-    Pct_aromatic = 100 * mean(mol$AI_Mod[present] > 0.5 & mol$AI_Mod[present] < 0.67)))
-}
-aromaticity <- aromaticity %>% left_join(sample_info %>% select(Sample_Name, Moisture, Treatment, Incubation_Day),
-                                         by = "Sample_Name")
-write_csv(aromaticity, file.path(out_dir, "fticr_aromaticity_per_sample.csv"))
+chemistry <- tibble(
+  Sample_Name = rownames(rel_matrix),
+  n_formulas  = rowSums(int_matrix > 0),
+  AI_mod_wmean = as.numeric(rel_matrix %*% mol$AI_Mod),
+  NOSC_wmean   = as.numeric(rel_matrix %*% mol$NOSC)) %>%
+  left_join(sample_info %>% select(Sample_Name, Moisture, Treatment, Incubation_Day),
+            by = "Sample_Name")
+write_csv(chemistry, file.path(out_dir, "fticr_chemistry_per_sample.csv"))
 
-aromaticity_table <- aromaticity %>%
+chemistry_table <- chemistry %>%
   group_by(Moisture, Treatment) %>%
   summarize(n = n(),
-            across(c(n_formulas, AI_mod_mean, NOSC_mean, Pct_condensed_aromatic, Pct_aromatic),
-                   list(mean = mean, sd = sd)), .groups = "drop")
-print(aromaticity_table)
-write_csv(aromaticity_table, file.path(out_dir, "fticr_aromaticity_by_group.csv"))
+            across(c(n_formulas, AI_mod_wmean, NOSC_wmean),
+                   list(median = median, q25 = ~quantile(., 0.25), q75 = ~quantile(., 0.75))),
+            .groups = "drop")
+print(chemistry_table)
+write_csv(chemistry_table, file.path(out_dir, "fticr_chemistry_by_group.csv"))
 
 
 # Figure 2: (a) AI_mod, (b) NOSC, (c) NMDS ----
-# (a, b): per-sample mean AI_mod and NOSC by DOM treatment, within each
+# (a, b): per-sample intensity-weighted AI_mod and NOSC by DOM treatment, within each
 #   inundation history. Same style as Fig_Total_O2_by_Treatment: large symbol =
 #   median, bar = interquartile range, small symbols = single samples.
 #   Kruskal-Wallis among the three treatments in each panel; letters only where
@@ -310,10 +395,10 @@ write_csv(aromaticity_table, file.path(out_dir, "fticr_aromaticity_by_group.csv"
 library(patchwork)   # combine panels
 history_titles <- c(Dry = "Previously dry", Wet = "Wet")
 
-chem_long <- aromaticity %>%
+chem_long <- chemistry %>%
   mutate(Treatment = relabel_treatment(Treatment)) %>%
-  select(Sample_Name, Moisture, Treatment, AI_mod_mean, NOSC_mean, Pct_aromatic) %>%
-  pivot_longer(c(AI_mod_mean, NOSC_mean, Pct_aromatic), names_to = "Response", values_to = "Value")
+  select(Sample_Name, Moisture, Treatment, AI_mod_wmean, NOSC_wmean) %>%
+  pivot_longer(c(AI_mod_wmean, NOSC_wmean), names_to = "Response", values_to = "Value")
 
 # Kruskal-Wallis, then Dunn for every pair (interpreted only if Kruskal-Wallis p < 0.05)
 chem_tests <- tibble()
@@ -328,19 +413,39 @@ for (resp in unique(chem_long$Response)) for (mo in levels(chem_long$Moisture)) 
 }
 write_csv(chem_tests, file.path(out_dir, "fticr_chemistry_tests.csv"))
 
-# Letters for three groups: where Kruskal-Wallis is significant, a treatment
-# that differs from both others gets "b" and the other two get "a"; any other
-# pattern stops the script so the letters can be checked by hand.
+# Letters (compact letter display): where Kruskal-Wallis is significant,
+# treatments are ordered by median and each letter marks a run of adjacent
+# treatments in which no pair differs (Dunn p >= 0.05). Treatments that share a
+# letter do not differ. Example: if only the lowest and highest treatments
+# differ, they get "a" and "b" and the middle treatment gets "ab".
 chem_letters <- function(resp) {
   out <- tibble()
   for (mo in levels(chem_long$Moisture)) {
     t <- chem_tests %>% filter(Response == resp, Moisture == mo)
     if (t$KW_p[1] >= 0.05) next
-    trts <- levels(chem_long$Treatment)
-    n_sig <- sapply(trts, function(x) sum(t$significant & (t$Treatment_1 == x | t$Treatment_2 == x)))
-    stopifnot(sum(n_sig == 2) == 1, sum(t$significant) == 2)
-    out <- bind_rows(out, tibble(Moisture = mo, Treatment = factor(trts, levels = trts),
-                                 Letter = ifelse(n_sig == 2, "b", "a")))
+    meds <- chem_long %>% filter(Response == resp, Moisture == mo) %>%
+      group_by(Treatment) %>% summarize(m = median(Value), .groups = "drop") %>% arrange(m)
+    trts <- as.character(meds$Treatment)
+    differs <- function(x, y) any(t$significant & ((t$Treatment_1 == x & t$Treatment_2 == y) |
+                                                   (t$Treatment_1 == y & t$Treatment_2 == x)))
+    # runs of adjacent treatments with no significant pair
+    runs <- list()
+    for (i in seq_along(trts)) {
+      j <- i
+      while (j < length(trts) &&
+             !any(sapply(i:j, function(k) differs(trts[k], trts[j + 1])))) j <- j + 1
+      runs[[length(runs) + 1]] <- i:j
+    }
+    # drop runs contained in an earlier, longer run
+    runs <- runs[!sapply(seq_along(runs), function(r)
+      any(sapply(seq_along(runs)[-r], function(q) all(runs[[r]] %in% runs[[q]]) &&
+                   length(runs[[q]]) > length(runs[[r]]))))]
+    runs <- unique(runs)
+    lets <- sapply(seq_along(trts), function(k)
+      paste(letters[which(sapply(runs, function(r) k %in% r))], collapse = ""))
+    out <- bind_rows(out, tibble(Moisture = mo,
+                                 Treatment = factor(trts, levels = levels(chem_long$Treatment)),
+                                 Letter = lets))
   }
   out
 }
@@ -376,8 +481,8 @@ chem_panel <- function(resp, ylab) {
 }
 
 set.seed(1)   # same horizontal jitter of the small points every run
-fig2 <- (chem_panel("AI_mod_mean", expression(Mean~AI[mod])) /
-         chem_panel("NOSC_mean", "Mean NOSC")) |
+fig2 <- (chem_panel("AI_mod_wmean", expression(Intensity*"-"*weighted~AI[mod])) /
+         chem_panel("NOSC_wmean", "Intensity-weighted NOSC")) |
         (nmds_plot + theme_bw(base_size = 12) + theme(aspect.ratio = 1, panel.grid.minor = element_blank()) +
            scale_shape_manual(values = moisture_shapes, labels = history_titles, drop = FALSE))
 fig2 <- fig2 + plot_layout(widths = c(1, 1.15)) +

@@ -1,0 +1,4 @@
+Test,Grouping,n_samples,n_groups,WdS,omega_squared,p,n_perm,strata
+Inundation history (all samples),Moisture,28,2,3.542712460622977,0.08325103619729764,0.0012,9999,Incubation_Day
+"DOM treatment, previously dry",Treatment,15,3,0.8948026976027474,-0.014225843027746432,0.5031,9999,Incubation_Day
+"DOM treatment, wet",Treatment,13,3,4.038654495303453,0.31856217213859617,2e-4,9999,Incubation_Day

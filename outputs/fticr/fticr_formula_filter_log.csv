@@ -1,0 +1,6 @@
+Step,n_formulas
+Formulas in processed data package,14729
+Detected in > 50% of methanol blanks,189
+Outside 200-900 m/z,3025
+Removed by either filter,3122
+Formulas kept,11607
