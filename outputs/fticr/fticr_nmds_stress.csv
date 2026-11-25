@@ -1,0 +1,2 @@
+Distance,k,n_samples,n_formulas,Stress,Stress_rounded,Converged,Tries,Seed
+Bray-Curtis on Hellinger-transformed relative intensities,2,28,11607,0.06702220484013244,0.07,4,20,123
