@@ -1,7 +1,0 @@
-"Moisture","Treatment","Solution_DOC_mg_L","Added_solution_mL","Added_C_mg_kg","WEOC_mg_kg_Field","WEOC_mg_kg_Pre-incubation","Added_C_pct_of_field_WEOC","Added_C_pct_of_preincubation_WEOC"
-"Dry","Control",0.3,37.4,1.1,313.7,356.5,0.3,0.3
-"Dry","Unburned DOM",9.5,37.3,34.6,313.7,356.5,11,9.7
-"Dry","Burned DOM",9.3,37.4,35.2,313.7,356.5,11.2,9.9
-"Wet","Control",0.3,29.8,0.6,45.1,33.2,1.4,1.9
-"Wet","Unburned DOM",9.5,29.7,20.2,45.1,33.2,44.6,60.6
-"Wet","Burned DOM",9.3,29.7,19.8,45.1,33.2,43.9,59.6

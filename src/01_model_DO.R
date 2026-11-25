@@ -24,7 +24,7 @@
 #          outputs/modeling/YEP_DO_Series_Prepared.csv   (data actually fitted)
 #          outputs/modeling/YEP_BestFit_AllKm.csv        (all vials x all Km)
 #          outputs/modeling/YEP_BestFit_DOabove2_Km0.2.csv (sensitivity refit)
-#          outputs/figures/FigS_QC_Model_Fits_Km0.2.pdf/.png
+#          outputs/figures/FigS2_QC_Model_Fits_Km0.2.pdf/.png
 # Run time: about 5-10 min.
 # =============================================================================
 
@@ -239,8 +239,8 @@ qc_plot <- ggplot(qc, aes(time_min)) +
   theme(strip.text = element_text(size = 9), axis.text = element_text(size = 7.5),
         panel.spacing = unit(0.15, "lines"))
 # Saved at the size it is printed in the SI (landscape page), so the text stays readable
-ggsave(file.path(fig_dir, "FigS_QC_Model_Fits_Km0.2.pdf"), qc_plot, width = 9, height = 6)
-ggsave(file.path(fig_dir, "FigS_QC_Model_Fits_Km0.2.png"), qc_plot, width = 9, height = 6, dpi = 300)
+ggsave(file.path(fig_dir, "FigS2_QC_Model_Fits_Km0.2.pdf"), qc_plot, width = 9, height = 6)
+ggsave(file.path(fig_dir, "FigS2_QC_Model_Fits_Km0.2.png"), qc_plot, width = 9, height = 6, dpi = 300)
 
 # ---- 8. Console check -------------------------------------------------------
 print(best_fits %>% filter(Km_mg_L == Km_base) %>% group_by(Moisture) %>%

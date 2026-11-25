@@ -1,22 +1,29 @@
 # =============================================================================
 # 08_tables.R -- manuscript and SI tables
 # -----------------------------------------------------------------------------
-# Tables are numbered in the order they are first cited in the manuscript
-# (renumbered 23 Nov 2026; old numbers in brackets):
-# Table S1 [old S3]: sediment water extracts at collection and after
-#            pre-incubation. Ions now per kg dry sediment, like WEOC.
-# Table S2 [old S5]: treatment solutions: DOC, TDN, ions, and FT-ICR MS
+# Tables and file names follow the SI numbering (Supplementary Information
+# v10; file names renumbered 25 Nov 2026 to match, numbers in this script
+# before that in brackets):
+# Table S1 [S1]: sediment water extracts at collection and after
+#            pre-incubation. Ions per kg dry sediment, like WEOC.
+#            -> TableS1_Sediment_Extracts.csv
+# Table S2 [S4]: model fit for every vial at Km = 0.2 mg/L (least squares + MCMC)
+#            -> TableS2_Model_Fits_Km0.2.csv
+# Table S3 [S2]: treatment solutions: DOC, TDN, ions, and FT-ICR MS
 #            intensity-weighted AI_mod and NOSC of the solutions as added
-# Table S3 [old S4]: carbon added with the treatment solution vs
-#            water-extractable OC, and the share of post-incubation DOC above
-#            the controls
-# Table S4 [old S2]: model fit for every vial at Km = 0.2 mg/L (least squares + MCMC)
-# Table S5 [old S1]: median (IQR) of each response by sediment history x
+#            -> TableS3_Treatment_Solutions.csv
+#               (per-sample FT-ICR values: TableS3_support_Solution_FTICR_per_sample.csv)
+# Table S4 [S5]: median (IQR) of each response by sediment history x
 #            treatment (rank-based tests -> medians); nitrate per kg dry
 #            sediment; asterisks for every dry vs wet Mann-Whitney test.
-#            A mean (SD) version is saved for reference.
+#            -> TableS4_Group_Medians.csv
+#               (mean (SD) version for reference: TableS4_Group_Means_reference.csv)
 # Data S1  : model fits for every vial at the seven Sihi-range Km values
 #            discussed in the paper (least squares + MCMC; Supplementary Data CSV)
+#            -> DataS1_Model_Fits_AllKm.csv
+# Supporting table, not in the SI [S3]: carbon added with the treatment
+#            solution vs water-extractable OC, and the share of post-incubation
+#            DOC above the controls -> Supporting_Carbon_Added_vs_WEOC.csv
 #
 # Inputs : outputs/stats/microcosm_responses.csv, MannWhitney_*.csv (03_stats.R)
 #          outputs/modeling/YEP_DataPrep_Log.csv, YEP_BestFit_AllKm.csv (01)
@@ -113,7 +120,7 @@ tableS1 <- tableS1 %>%
             `SO4 in extract (mg L-1)`     = SO4_mg_L)
 write.csv(tableS1, file.path(out_dir, "TableS1_Sediment_Extracts.csv"), row.names = FALSE)
 
-# ---- Table S2: treatment solutions ------------------------------------------
+# ---- Table S3: treatment solutions ------------------------------------------
 # DOC/TDN: solutions as added (OCN-SK*, -UK*, -HK*). Ions: water-only incubations
 # (ION-WS*, -WU*, -WH*), i.e. the same solutions without sediment.
 # FT-ICR MS: solutions as added (ICR-UKA-C, ICR-HKA-C; one per incubation day).
@@ -154,13 +161,13 @@ solution_chem <- data.frame(
   n_formulas   = colSums(icr_int > 0),
   AI_mod_wmean = colSums(icr_rel * mol$AI_Mod[keep]),
   NOSC_wmean   = colSums(icr_rel * mol$NOSC[keep]))
-write.csv(solution_chem, file.path(out_dir, "TableS2_support_Solution_FTICR_per_sample.csv"), row.names = FALSE)
+write.csv(solution_chem, file.path(out_dir, "TableS3_support_Solution_FTICR_per_sample.csv"), row.names = FALSE)
 solution_chem_sum <- solution_chem %>% group_by(Treatment) %>%
   summarize(`FT-ICR formulas, mean (SD), n = 3` = mean_sd(n_formulas, 0),
             `AI_mod (intensity-weighted), mean (SD)` = mean_sd(AI_mod_wmean, 3),
             `NOSC (intensity-weighted), mean (SD)`   = mean_sd(NOSC_wmean, 3))
 
-tableS2 <- solution_doc %>% left_join(solution_ions, by = "Treatment") %>%
+tableS3 <- solution_doc %>% left_join(solution_ions, by = "Treatment") %>%
   mutate(across(where(is.numeric), ~ signif(., 3))) %>%
   left_join(solution_chem_sum, by = "Treatment") %>%
   mutate(Treatment = factor(Treatment, levels = trt_levels)) %>% arrange(Treatment) %>%
@@ -170,9 +177,9 @@ tableS2 <- solution_doc %>% left_join(solution_ions, by = "Treatment") %>%
          `Mg (mg L-1)` = `00925_Mg_mg_per_L`, `K (mg L-1)` = `00935_K_mg_per_L`, `Na (mg L-1)` = `00930_Na_mg_per_L`) %>%
   mutate(across(starts_with(c("FT-ICR", "AI_mod", "NOSC")), ~ ifelse(is.na(.), "n.a.", .))) %>%
   table_names()
-write.csv(tableS2, file.path(out_dir, "TableS2_Treatment_Solutions.csv"), row.names = FALSE)
+write.csv(tableS3, file.path(out_dir, "TableS3_Treatment_Solutions.csv"), row.names = FALSE)
 
-# ---- Table S3: carbon added vs water-extractable OC -------------------------
+# ---- Supporting table (not in the SI): carbon added vs water-extractable OC ----
 # Added solution volume per vial = total water - pore water already in the
 # sediment (field-moist mass - dry mass). Added C = solution DOC x volume / dry mass.
 # Post-incubation DOC: median of the 5 vials. "Above control" = treatment median
@@ -201,7 +208,7 @@ post_doc <- responses %>% group_by(Moisture, Treatment) %>%
   mutate(Post_DOC_above_control = Post_DOC_median - Post_DOC_median[Treatment == "Control"],
          Share_above_control_pct = 100 * Post_DOC_above_control / Post_DOC_median) %>% ungroup()
 
-tableS3 <- mass %>%
+carbon_added <- mass %>%
   left_join(solution_doc %>% select(Treatment, Solution_DOC_mg_L), by = "Treatment") %>%
   mutate(Added_C_mg_kg = Solution_DOC_mg_L * (Added_solution_mL / 1000) / (as.numeric(Dry_Sediment_Mass_g) / 1000)) %>%
   group_by(Moisture, Treatment) %>%
@@ -228,14 +235,14 @@ tableS3 <- mass %>%
             `Post-incubation DOC above control (mg C kg-1)` = Post_DOC_above_control,
             `DOC above control (% of post-incubation DOC)` = Share_above_control_pct) %>%
   table_names()
-write.csv(tableS3, file.path(out_dir, "TableS3_Carbon_Added_vs_WEOC.csv"), row.names = FALSE, na = "")
+write.csv(carbon_added, file.path(out_dir, "Supporting_Carbon_Added_vs_WEOC.csv"), row.names = FALSE, na = "")
 
-# ---- Table S4: per-vial model fits at Km = 0.2 ----------------------------------
+# ---- Table S2: per-vial model fits at Km = 0.2 ----------------------------------
 prep <- read.csv(file.path("outputs", "modeling", "YEP_DataPrep_Log.csv"))
 best <- read.csv(file.path("outputs", "modeling", "YEP_BestFit_AllKm.csv")) %>% filter(Km_mg_L == Km_base)
 mcmc <- read.csv(file.path("outputs", "modeling", "YEP_MCMC_Summary.csv")) %>% filter(Km_mg_L == Km_base)
 
-tableS4 <- prep %>%
+tableS2 <- prep %>%
   left_join(best %>% select(Sample_Name, n_points, RMSE, R2, kL_L_kg_h, Vmax_mg_kg_h), by = "Sample_Name") %>%
   left_join(mcmc %>% select(Sample_Name, kL_kg_median, kL_kg_lower95, kL_kg_upper95,
                             Vmax_kg_median, Vmax_kg_lower95, Vmax_kg_upper95,
@@ -259,10 +266,10 @@ tableS4 <- prep %>%
             `Min bulk ESS` = round(ESS_bulk_min), `Min tail ESS` = round(ESS_tail_min),
             Converged = ifelse(converged, "yes", "no")) %>%
   table_names()
-write.csv(tableS4, file.path(out_dir, "TableS4_Model_Fits_Km0.2.csv"), row.names = FALSE)
+write.csv(tableS2, file.path(out_dir, "TableS2_Model_Fits_Km0.2.csv"), row.names = FALSE)
 
 # ---- Data S1: per-vial model fits at every Km (Supplementary Data) -----------
-# Same fits as Table S4, for every Km discussed in the paper. Plain numbers (no
+# Same fits as Table S2, for every Km discussed in the paper. Plain numbers (no
 # formatting), one row per vial x Km. 01_model_DO.R also fits Km = 0.05, 0.1,
 # 3.2, 5.28 and 10 mg/L for the response to reviewers; those are left out here so
 # Data S1 holds only the seven Km values in the Sihi et al. (2020) range
@@ -304,26 +311,26 @@ stopifnot(nrow(dataS1) == 30 * length(Km_paper),
           all(!is.na(dataS1$`kL, posterior median (L kg-1 h-1)`)))
 write.csv(dataS1, file.path(out_dir, "DataS1_Model_Fits_AllKm.csv"), row.names = FALSE, na = "")
 
-# ---- Table S5: group summaries -----------------------------------------------
+# ---- Table S4: group summaries -----------------------------------------------
 # Median (Q1-Q3) because every test is rank-based (03_stats.R). Nitrate per kg
 # dry sediment (normalized like DOC). Asterisk (*) on the wet "All treatments"
 # value where wet differs from previously dry, p < 0.05 (Mann-Whitney,
 # treatments pooled, n = 15 vs 15; Vmax and kL at Km = 0.2).
-s5_cols <- c(O2_rate_mg_kg_h = "O2 consumption (mg O2 kg-1 h-1)",
+s4_cols <- c(O2_rate_mg_kg_h = "O2 consumption (mg O2 kg-1 h-1)",
              Vmax_mg_kg_h    = "Vmax (mg O2 kg-1 h-1)",
              kL_L_kg_h       = "kL (L kg-1 h-1)",
              DOC_mg_kg       = "DOC (mg C kg-1)",
              NO3_mg_N_kg     = "NO3-N (mg N kg-1)")
-s5_digits <- c(O2_rate_mg_kg_h = 1, Vmax_mg_kg_h = 1, kL_L_kg_h = 2, DOC_mg_kg = 1, NO3_mg_N_kg = 1)
+s4_digits <- c(O2_rate_mg_kg_h = 1, Vmax_mg_kg_h = 1, kL_L_kg_h = 2, DOC_mg_kg = 1, NO3_mg_N_kg = 1)
 
 summarize_groups <- function(d, f) {
   out <- d %>% summarize(n = n(), .groups = "drop")
-  for (col in names(s5_cols)) {
-    out[[s5_cols[[col]]]] <- (d %>% summarize(v = f(.data[[col]], s5_digits[[col]]), .groups = "drop"))$v
+  for (col in names(s4_cols)) {
+    out[[s4_cols[[col]]]] <- (d %>% summarize(v = f(.data[[col]], s4_digits[[col]]), .groups = "drop"))$v
   }
   out
 }
-build_s5 <- function(f) {
+build_s4 <- function(f) {
   by_trt <- summarize_groups(responses %>% group_by(Moisture, Treatment), f) %>%
     mutate(Treatment = as.character(Treatment))
   pooled <- summarize_groups(responses %>% group_by(Moisture), f) %>% mutate(Treatment = "All treatments")
@@ -336,20 +343,20 @@ dry_wet_sig <- bind_rows(
   read.csv(file.path(stats_dir, "MannWhitney_DryWet_Chemistry.csv")) %>% transmute(Response, p),
   read.csv(file.path(stats_dir, "MannWhitney_DryWet_byKm.csv")) %>% filter(Km_mg_L == Km_base) %>%
     transmute(Response = Parameter, p))
-stopifnot(all(names(s5_cols) %in% dry_wet_sig$Response))
+stopifnot(all(names(s4_cols) %in% dry_wet_sig$Response))
 add_stars <- function(tab) {
-  for (resp in names(s5_cols)) {
+  for (resp in names(s4_cols)) {
     if (dry_wet_sig$p[dry_wet_sig$Response == resp] < 0.05) {
       rows <- tab$Moisture == "Wet" & tab$Treatment == "All treatments"
-      tab[[s5_cols[[resp]]]][rows] <- paste0(tab[[s5_cols[[resp]]]][rows], "*")
+      tab[[s4_cols[[resp]]]][rows] <- paste0(tab[[s4_cols[[resp]]]][rows], "*")
     }
   }
   tab
 }
-tableS5      <- build_s5(med_iqr) %>% add_stars() %>% table_names()
-tableS5_mean <- build_s5(mean_sd) %>% add_stars() %>% table_names()
-write.csv(tableS5,      file.path(out_dir, "TableS5_Group_Medians.csv"), row.names = FALSE)
-write.csv(tableS5_mean, file.path(out_dir, "TableS5_Group_Means_reference.csv"), row.names = FALSE)
+tableS4      <- build_s4(med_iqr) %>% add_stars() %>% table_names()
+tableS4_mean <- build_s4(mean_sd) %>% add_stars() %>% table_names()
+write.csv(tableS4,      file.path(out_dir, "TableS4_Group_Medians.csv"), row.names = FALSE)
+write.csv(tableS4_mean, file.path(out_dir, "TableS4_Group_Means_reference.csv"), row.names = FALSE)
 
 options(width = 200)
-print(tableS1); print(tableS2); print(tableS3); print(tableS5)
+print(tableS1); print(tableS3); print(tableS4); print(carbon_added)

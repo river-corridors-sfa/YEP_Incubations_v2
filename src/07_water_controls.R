@@ -20,7 +20,7 @@ y_limits       <- c(0, 10)          # fixed y-axis range (mg/L) for all panels
 n_columns      <- 3                 # number of panel columns
 dir.create(file.path("outputs", "figures"), recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path("outputs", "tables"), recursive = TRUE, showWarnings = FALSE)
-output_prefix  <- file.path("outputs", "figures", "FigS_Water_Only_Controls")
+output_prefix  <- file.path("outputs", "figures", "FigS1_Water_Only_Controls")
 
 # ==== Read data =====
 # The published data-package file has 2 extra lines above the column names

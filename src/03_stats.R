@@ -4,11 +4,11 @@
 # All tests are non-parametric (rank-based), so a single extreme microcosm
 # cannot drive a result.
 #
-# Part A. Dry vs wet at every Km (stars in Fig. 1 and Fig. S Km full range)
+# Part A. Dry vs wet at every Km (stars in Fig. 2 and Fig. S Km full range)
 #   Mann-Whitney (Wilcoxon rank-sum) test of dry vs wet, treatments pooled
 #   (15 vs 15 vials), for kL and Vmax per kg (leas-square estimates 01_model_DO.R).
 #
-# Part B. DOM treatment effects (letters in Fig. 1 and Fig. S Km full range)
+# Part B. DOM treatment effects (letters in Fig. 2 and Fig. S Km full range)
 #   Within each sediment history (dry, wet), n = 5 vials per treatment:
 #     1. Kruskal-Wallis test among Control, Unburned DOM and Burned DOM
 #     2. Dunn's test for each pair of treatments, with no p-value adjustment.
@@ -22,7 +22,7 @@
 #   C1. Measured O2 consumption rate, dry vs wet (Mann-Whitney, treatments
 #       pooled). Part A covers only kL and Vmax.
 #   C1b. Post-incubation DOC (mg C/kg) and nitrate, dry vs wet (Mann-Whitney,
-#       treatments pooled); asterisks in SI Table S5. Nitrate is tested per kg
+#       treatments pooled); asterisks in SI Table S4. Nitrate is tested per kg
 #       dry sediment (same normalization as DOC) and, for reference, per liter.
 #   C2. Do low-DO readings drive the results? kL and Vmax refit at Km = 0.2
 #       using only readings with DO >= 2 mg/L (01_model_DO.R), tested again:

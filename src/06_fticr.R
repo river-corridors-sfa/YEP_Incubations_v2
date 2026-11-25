@@ -1,12 +1,12 @@
 # =============================================================================
-# 06_fticr.R -- FTICR-MS: NMDS, Wd* tests, dispersion, AI_mod and NOSC (Fig. 2)
+# 06_fticr.R -- FTICR-MS: NMDS, Wd* tests, dispersion, AI_mod and NOSC (Fig. 3)
 # -----------------------------------------------------------------------------
 # Post-incubation aqueous samples (SIR). All analyses are intensity weighted:
 # peak intensities are converted to relative intensities within each sample
 # (each sample sums to 1).
 #   - Bray-Curtis dissimilarity on Hellinger-transformed relative intensities
 #     (square root of relative intensity)
-#   - NMDS on Bray-Curtis dissimilarity (Fig. 2)
+#   - NMDS on Bray-Curtis dissimilarity (Fig. 3)
 #   - group differences in composition (location/centroid): distance-based
 #     multivariate Welch ANOVA, Wd* test (Hamidi et al. 2019, Microbiome 7:51),
 #     which is robust to unequal dispersion and unequal group sizes. Used
@@ -22,7 +22,7 @@
 #   - mean Bray-Curtis dissimilarity of each wet treatment to the previously dry
 #     samples (used in the Results text)
 #   - intensity-weighted mean AI_mod and NOSC per sample (table)
-#   - Figure 2: (a) AI_mod and (b) NOSC by DOM treatment within each
+#   - Figure 3: (a) AI_mod and (b) NOSC by DOM treatment within each
 #     history (Kruskal-Wallis, Dunn letters), (c) NMDS
 # Note: YEP2A_SIR-S2 and YEP2B_SIR-S3 were reacquired at 0.2 s ion
 #   accumulation (low signal at 0.075 s); the processed data package contains
@@ -34,9 +34,9 @@
 #      processed data package was filtered at 100-1000 m/z).
 #
 # Inputs : data_files$fticr_data, data_files$fticr_mol, data_files$sample_metadata
-# Outputs: outputs/figures/Fig2_FTICR.pdf/.png  (replaces Fig2_FTICR_NMDS)
+# Outputs: outputs/figures/Fig3_FTICR.pdf/.png  (manuscript Figure 3)
 #          outputs/fticr/fticr_formula_filter_log.csv, fticr_formula_filter_per_sample.csv,
-#          fticr_sample_counts.csv, fticr_nmds_site_scores.csv,
+#          fticr_sample_counts.csv, fticr_nmds_site_scores.csv, fticr_nmds_stress.csv,
 #          fticr_wds_tests.csv, fticr_tw2_pairwise.csv, fticr_betadisper.csv,
 #          fticr_mean_distance_to_dry.csv, fticr_chemistry_per_sample.csv,
 #          fticr_chemistry_by_group.csv, fticr_chemistry_tests.csv
@@ -187,7 +187,7 @@ rel_matrix <- int_matrix / rowSums(int_matrix)
 ## down-weights the most intense peaks before computing Bray-Curtis
 hel_matrix <- sqrt(rel_matrix)
 
-## Number of samples per group (Fig. 2 caption)
+## Number of samples per group (Fig. 3 caption)
 sample_counts <- sample_info %>% count(Moisture, Treatment, name = "n_samples")
 print(sample_counts)
 write_csv(sample_counts, file.path(out_dir, "fticr_sample_counts.csv"))
@@ -209,6 +209,15 @@ site_scores <- scores(nmds, display = "sites") %>%
   left_join(sample_info, by = "Sample_Name")
 
 write_csv(site_scores, file.path(out_dir, "fticr_nmds_site_scores.csv"))
+
+## NMDS stress and run details (the stress printed on Fig. 3c and in its caption)
+nmds_stress <- tibble(
+  Distance = "Bray-Curtis on Hellinger-transformed relative intensities",
+  k = nmds$ndim, n_samples = nrow(hel_matrix), n_formulas = ncol(hel_matrix),
+  Stress = nmds$stress, Stress_rounded = round(nmds$stress, 2),
+  Converged = nmds$converged, Tries = nmds$tries, Seed = 123)
+print(nmds_stress)
+write_csv(nmds_stress, file.path(out_dir, "fticr_nmds_stress.csv"))
 
 
 # Group differences in composition: Wd* tests ----
@@ -364,7 +373,7 @@ nmds_plot <- ggplot(site_scores %>% mutate(Treatment = relabel_treatment(Treatme
 print(nmds_plot)
 
 # Save plot
-# Saved below as panel (c) of the combined Figure 2 (see "Figure 2")
+# Saved below as panel (c) of the combined Figure 3 (see "Figure 3")
 
 
 # Intensity-weighted AI_mod and NOSC per sample ----
@@ -397,7 +406,7 @@ print(chemistry_table)
 write_csv(chemistry_table, file.path(out_dir, "fticr_chemistry_by_group.csv"))
 
 
-# Figure 2: (a) AI_mod, (b) NOSC, (c) NMDS ----
+# Figure 3: (a) AI_mod, (b) NOSC, (c) NMDS ----
 # (a, b): per-sample intensity-weighted AI_mod and NOSC by DOM treatment, within each
 #   inundation history. Same style as Fig_Total_O2_by_Treatment: large symbol =
 #   median, bar = interquartile range, small symbols = single samples.
@@ -500,6 +509,6 @@ fig2 <- (chem_panel("AI_mod_wmean", expression(Intensity*"-"*weighted~AI[mod])) 
            scale_shape_manual(values = moisture_shapes, labels = history_titles, drop = FALSE))
 fig2 <- fig2 + plot_layout(widths = c(1, 1.15)) +
   plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")")
-ggsave(file.path(fig_dir, "Fig2_FTICR.png"), fig2, width = 13, height = 7, dpi = 300)
-ggsave(file.path(fig_dir, "Fig2_FTICR.pdf"), fig2, width = 13, height = 7)
-cat(sprintf("\nFigure 2 saved. NMDS stress = %.3f (for the caption)\n", nmds$stress))
+ggsave(file.path(fig_dir, "Fig3_FTICR.png"), fig2, width = 13, height = 7, dpi = 300)
+ggsave(file.path(fig_dir, "Fig3_FTICR.pdf"), fig2, width = 13, height = 7)
+cat(sprintf("\nFigure 3 saved. NMDS stress = %.3f (for the caption)\n", nmds$stress))

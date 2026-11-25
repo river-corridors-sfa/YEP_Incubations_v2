@@ -264,6 +264,6 @@ for (part in names(ci_parts)) {
           axis.text.x = element_text(size = 8.5), strip.text = element_text(size = 10),
           panel.spacing = unit(0.3, "lines"))
   # Saved at the size it is printed in the SI (landscape page), so the text stays readable
-  ggsave(file.path(fig_dir, paste0("FigS_MCMC_Credible_Intervals_", part, ".pdf")), p_ci, width = 9, height = 6)
-  ggsave(file.path(fig_dir, paste0("FigS_MCMC_Credible_Intervals_", part, ".png")), p_ci, width = 9, height = 6, dpi = 300)
+  ggsave(file.path(fig_dir, paste0("FigS3_MCMC_Credible_Intervals_", part, ".pdf")), p_ci, width = 9, height = 6)
+  ggsave(file.path(fig_dir, paste0("FigS3_MCMC_Credible_Intervals_", part, ".png")), p_ci, width = 9, height = 6, dpi = 300)
 }

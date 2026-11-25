@@ -1,8 +1,8 @@
 # =============================================================================
-# 04_fig1_km_sensitivity.R -- Fig. 1 and the full-range SI figure
+# 04_fig1_km_sensitivity.R -- Fig. 2 and the full-range SI figure
 # -----------------------------------------------------------------------------
 # Vmax and kL (per kg dry sediment) against the fixed Km used in the fit.
-#   Fig. 1        : Km within the Sihi et al. (2020) posterior range (0.13-1.22 mg/L)
+#   Fig. 2        : Km within the Sihi et al. (2020) posterior range (0.13-1.22 mg/L)
 #   Fig. S (full) : Km 0.05-10 mg/L, including Km = 10 mg/L used in the
 #                   submitted manuscript (for the response to reviewers)
 #
@@ -12,7 +12,7 @@
 #           DOM treatments pooled, Mann-Whitney test (03_stats.R). The same
 #           star is repeated in the dry and the wet panel of a row.
 #           *** p < 0.001, ** p < 0.01, * p < 0.05, ns p >= 0.05.
-#           Fig. 1 has no stars: dry and wet differ at every Km it shows
+#           Fig. 2 has no stars: dry and wet differ at every Km it shows
 #           (p < 0.001), which is stated in the caption instead. The script
 #           stops if that is ever not true.
 #   Letters (above the points): DOM treatments within that panel. Shown only
@@ -26,7 +26,7 @@
 # Inputs : outputs/modeling/YEP_BestFit_AllKm.csv (01_model_DO.R)
 #          outputs/stats/MannWhitney_DryWet_byKm.csv (03_stats.R)
 #          outputs/stats/Treatment_Letters_byKm.csv  (03_stats.R)
-# Outputs: outputs/figures/Fig1_Km_Sensitivity_SihiRange.pdf/.png
+# Outputs: outputs/figures/Fig2_Km_Sensitivity_SihiRange.pdf/.png
 #          outputs/figures/FigS_Km_Sensitivity_FullRange.pdf/.png
 # =============================================================================
 
@@ -191,10 +191,10 @@ km_plot <- function(km_min, km_max, shade_sihi, compact = FALSE, show_stars = TR
     guides(color = guide_legend(override.aes = list(size = 4, linewidth = 1)))
 }
 
-# ---- 3. Fig. 1: Sihi et al. (2020) posterior range --------------------------
+# ---- 3. Fig. 2: Sihi et al. (2020) posterior range --------------------------
 fig1 <- km_plot(sihi_range[1], sihi_range[2], shade_sihi = FALSE, show_stars = FALSE)
-ggsave(file.path(fig_dir, "Fig1_Km_Sensitivity_SihiRange.pdf"), fig1, width = 12, height = 10)
-ggsave(file.path(fig_dir, "Fig1_Km_Sensitivity_SihiRange.png"), fig1, width = 12, height = 10, dpi = 300)
+ggsave(file.path(fig_dir, "Fig2_Km_Sensitivity_SihiRange.pdf"), fig1, width = 12, height = 10)
+ggsave(file.path(fig_dir, "Fig2_Km_Sensitivity_SihiRange.png"), fig1, width = 12, height = 10, dpi = 300)
 
 # ---- 4. Fig. S: full Km range, including the submitted value -----------------
 figS <- km_plot(0, Inf, shade_sihi = TRUE, compact = TRUE)

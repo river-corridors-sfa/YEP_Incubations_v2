@@ -1,7 +1,0 @@
-Model,n_samples,Term,Df,SumOfSqs,R2,F,Pr(>F)
-Moisture + Treatment + Incubation_Day,28,Moisture,1,0.4898693724140122,0.09448060345483841,3.0540146592348782,0.0029
-Moisture + Treatment + Incubation_Day,28,Treatment,2,0.7315718609655608,0.14109751453534278,2.2804356768239704,0.0042
-Moisture + Treatment + Incubation_Day,28,Incubation_Day,2,0.43833240288022335,0.08454072099639649,1.3663577061544412,0.1277
-Moisture + Treatment + Incubation_Day,28,Residual,22,3.528839051417081,0.6806035687226168,NA,NA
-Moisture + Treatment + Incubation_Day,28,Total,27,5.184867099712895,1,NA,NA
-Moisture * Treatment + Incubation_Day,28,Moisture:Treatment,2,0.43816599840576664,0.08450862673606994,1.4177041404585042,0.1101
