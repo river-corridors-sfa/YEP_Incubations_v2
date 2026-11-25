@@ -1,0 +1,2 @@
+"Response","Comparison","median_dry_control","median_dry_burned","median_wet_control","median_wet_burned","difference_dry","difference_wet","interaction","CI_low","CI_high","n_boot","CI_excludes_0"
+"O2_rate_mg_kg_h","Burned DOM - Control",52.43,65.34,73.49,64.42,12.91,-9.06999999999999,21.98,-0.27000000000001,31.83,10000,FALSE

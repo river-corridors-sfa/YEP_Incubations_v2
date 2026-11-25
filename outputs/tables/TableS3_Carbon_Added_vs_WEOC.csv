@@ -1,0 +1,7 @@
+"Moisture","Treatment","Solution DOC (mg C L-1)","Solution added (mL per vial)","C added (mg C kg-1)","WEOC at collection (mg C kg-1)","WEOC after pre-incubation (mg C kg-1)","C added (% of WEOC at collection)","C added (% of WEOC after pre-incubation)","Post-incubation DOC, median (mg C kg-1)","Post-incubation DOC above control (mg C kg-1)","DOC above control (% of post-incubation DOC)"
+"Dry","Control",0.3,37.4,1.1,313.7,356.5,0.3,0.3,374.2,,
+"Dry","Unburned DOM",9.5,37.3,34.6,313.7,356.5,11,9.7,392.5,18.3,4.7
+"Dry","Burned DOM",9.3,37.4,35.2,313.7,356.5,11.2,9.9,437.1,62.9,14.4
+"Wet","Control",0.3,29.8,0.6,45.1,33.2,1.4,1.9,9.1,,
+"Wet","Unburned DOM",9.5,29.7,20.2,45.1,33.2,44.6,60.6,20.7,11.6,55.9
+"Wet","Burned DOM",9.3,29.7,19.8,45.1,33.2,43.9,59.6,24.9,15.7,63.3

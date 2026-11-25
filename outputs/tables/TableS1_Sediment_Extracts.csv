@@ -1,0 +1,9 @@
+"Sediment","Stage","Sample","Extract water (L kg-1 dry sediment)","WEOC (mg C kg-1), mean (SD), n = 3","NO3-N (mg N kg-1), n = 1","SO4 (mg kg-1), n = 1","NO3-N in extract (mg N L-1)","SO4 in extract (mg L-1)"
+"Dry","Field (collection)","YEP1",2.11,"313.7 (10.9)",16.3,5.53,7.74,2.62
+"Dry","Pre-incubated, incubation day 1","YEP1A",2.12,"349.4 (38.4)",25.2,7.47,11.9,3.53
+"Dry","Pre-incubated, incubation day 2","YEP1B",2.12,"341.5 (10.6)",30.3,8.67,14.3,4.09
+"Dry","Pre-incubated, incubation day 3","YEP1C",2.12,"378.6 (14.8)",30.5,9.11,14.4,4.3
+"Wet","Field (collection)","YEP2",3.4,"45.1 (7.6)",0.391,7.55,0.115,2.22
+"Wet","Pre-incubated, incubation day 1","YEP2A",3.38,"34.5 (4.9)",0.22,2.03,0.065,0.6
+"Wet","Pre-incubated, incubation day 2","YEP2B",3.33,"31.9 (2.3)",0.217,1.93,0.065,0.58
+"Wet","Pre-incubated, incubation day 3","YEP2C",3.34,"33.4 (5.0)",0.217,2.07,0.065,0.62

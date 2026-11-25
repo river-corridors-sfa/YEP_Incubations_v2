@@ -18,9 +18,12 @@
 #   Responses: Vmax and kL per kg at every Km, and the measured O2 consumption
 #   rate per kg (does not depend on Km).
 #
-# Part C. Two more checks, with the same tests
+# Part C. More checks, with the same tests
 #   C1. Measured O2 consumption rate, dry vs wet (Mann-Whitney, treatments
 #       pooled). Part A covers only kL and Vmax.
+#   C1b. Post-incubation DOC (mg C/kg) and nitrate, dry vs wet (Mann-Whitney,
+#       treatments pooled); asterisks in SI Table S5. Nitrate is tested per kg
+#       dry sediment (same normalization as DOC) and, for reference, per liter.
 #   C2. Do low-DO readings drive the results? kL and Vmax refit at Km = 0.2
 #       using only readings with DO >= 2 mg/L (01_model_DO.R), tested again:
 #       dry vs wet (Mann-Whitney) and DOM treatments within dry and within wet
@@ -38,6 +41,10 @@
 #   replacement within each of the 4 groups. A CI that includes 0 means no
 #   evidence that the difference differs between histories.
 #
+# Part D2. Same bootstrap as Part D for the measured total O2 consumption rate
+#   (does not depend on Km). H2 predicts that burned DOM increases total O2
+#   consumption more in previously dry than in wet sediments.
+#
 # The linear-model version of Part B (reviewed in November 2026) is in
 # Archive/2026-11_treatment_linear_model_reviewed/.
 #
@@ -52,6 +59,8 @@
 #          outputs/stats/DOabove2_Refit_Tests.csv
 #          outputs/stats/DOabove2_Refit_Dunn.csv (only if a Kruskal-Wallis test is significant)
 #          outputs/stats/Bootstrap_Interaction_Vmax_byKm.csv
+#          outputs/stats/MannWhitney_DryWet_Chemistry.csv      (C1b)
+#          outputs/stats/Bootstrap_Interaction_TotalO2.csv     (D2)
 # =============================================================================
 
 rm(list = ls(all = TRUE))
@@ -112,7 +121,8 @@ rates <- read_data(data_files$rates) %>%
 
 params <- best_fits %>%
   filter(Km_mg_L == Km_base) %>%
-  transmute(ID = make_id(Sample_Name), Vmax_mg_kg_h, kL_L_kg_h)
+  transmute(ID = make_id(Sample_Name), Vmax_mg_kg_h, kL_L_kg_h,
+            L_water_per_kg)   # liters of water per kg dry sediment in each vial
 
 params_DO2 <- read.csv(file.path("outputs", "modeling", "YEP_BestFit_DOabove2_Km0.2.csv")) %>%
   transmute(ID = make_id(Sample_Name), Vmax_DO2 = Vmax_mg_kg_h, kL_DO2 = kL_L_kg_h)
@@ -134,7 +144,10 @@ dat <- rates %>%
          Treatment = factor(dplyr::recode(sub(".*_([HSU])[0-9]$", "\\1", ID),
                                           S = "Control", U = "Unburned + DOC", H = "High Burn + DOC"),
                             levels = c("Control", "Unburned + DOC", "High Burn + DOC")),
-         Day       = factor(substr(ID, 5, 5), levels = c("A", "B", "C"), labels = c("1", "2", "3")))
+         Day       = factor(substr(ID, 5, 5), levels = c("A", "B", "C"), labels = c("1", "2", "3")),
+         # Nitrate per kg dry sediment, normalized like DOC: concentration in
+         # the vial water x liters of water per kg dry sediment
+         NO3_mg_N_kg = NO3_mg_N_L * L_water_per_kg)
 
 stopifnot(nrow(dat) == 30, all(table(dat$Moisture, dat$Treatment) == 5))
 write.csv(dat, file.path(out_dir, "microcosm_responses.csv"), row.names = FALSE)
@@ -245,6 +258,18 @@ mw_o2 <- data.frame(Response = "O2_rate_mg_kg_h", n_dry = length(o2_dry), n_wet 
                     W = unname(o2_test$statistic), p = o2_test$p.value)
 write.csv(mw_o2, file.path(out_dir, "MannWhitney_DryWet_TotalO2.csv"), row.names = FALSE)
 
+# ---- C1b. Post-incubation DOC and nitrate: dry vs wet ------------------------
+mw_chem <- data.frame()
+for (col in c("DOC_mg_kg", "NO3_mg_N_kg", "NO3_mg_N_L")) {
+  x_dry <- dat[[col]][dat$Moisture == "Dry"]
+  x_wet <- dat[[col]][dat$Moisture == "Wet"]
+  test  <- wilcox.test(x_dry, x_wet, exact = FALSE)
+  mw_chem <- rbind(mw_chem, data.frame(Response = col, n_dry = sum(!is.na(x_dry)), n_wet = sum(!is.na(x_wet)),
+                                       median_dry = median(x_dry, na.rm = TRUE), median_wet = median(x_wet, na.rm = TRUE),
+                                       W = unname(test$statistic), p = test$p.value))
+}
+write.csv(mw_chem, file.path(out_dir, "MannWhitney_DryWet_Chemistry.csv"), row.names = FALSE)
+
 # ---- C2. Refits with DO >= 2 mg/L only (Km = 0.2) ----------------------------
 # One row per test. "all_readings" = the standard fit at Km = 0.2;
 # "DO_above_2" = the refit that leaves out readings below 2 mg/L.
@@ -323,6 +348,25 @@ for (Km in sort(unique(best_fits$Km_mg_L))) {
 h2$CI_excludes_0 <- h2$CI_low > 0 | h2$CI_high < 0
 write.csv(h2, file.path(out_dir, "Bootstrap_Interaction_Vmax_byKm.csv"), row.names = FALSE)
 
+# ---- D2. Same bootstrap for the measured total O2 consumption rate ------------
+set.seed(2026)
+group_o2 <- function(mo, tr) dat$O2_rate_mg_kg_h[dat$Moisture == mo & dat$Treatment == tr]
+DC <- group_o2("Dry", "Control"); DB <- group_o2("Dry", "High Burn + DOC")
+WC <- group_o2("Wet", "Control"); WB <- group_o2("Wet", "High Burn + DOC")
+stopifnot(all(lengths(list(DC, DB, WC, WB)) == 5))
+obs  <- differences(DC, DB, WC, WB)
+boot <- t(replicate(n_boot, differences(sample(DC, replace = TRUE), sample(DB, replace = TRUE),
+                                        sample(WC, replace = TRUE), sample(WB, replace = TRUE))))
+ci <- apply(boot, 2, quantile, c(0.025, 0.975))
+h2_o2 <- data.frame(
+  Response = "O2_rate_mg_kg_h", Comparison = "Burned DOM - Control",
+  median_dry_control = median(DC), median_dry_burned = median(DB),
+  median_wet_control = median(WC), median_wet_burned = median(WB),
+  difference_dry = obs[["dry"]], difference_wet = obs[["wet"]], interaction = obs[["interaction"]],
+  CI_low = ci[1, "interaction"], CI_high = ci[2, "interaction"], n_boot = n_boot)
+h2_o2$CI_excludes_0 <- h2_o2$CI_low > 0 | h2_o2$CI_high < 0
+write.csv(h2_o2, file.path(out_dir, "Bootstrap_Interaction_TotalO2.csv"), row.names = FALSE)
+
 # ---- Console summary --------------------------------------------------------
 options(width = 150)
 sihi <- function(x) is.na(x) | (x >= 0.13 & x <= 1.22)   # Km values reported in the manuscript
@@ -341,8 +385,13 @@ print(dunn_all %>% filter(sihi(Km_mg_L), !KW_significant) %>% group_by(Response,
         summarize(min_pair_p = round(min(p), 3), max_pair_p = round(max(p), 3), .groups = "drop"), row.names = FALSE)
 cat("\nMeasured O2 consumption rate, dry vs wet (Mann-Whitney):\n")
 print(mw_o2 %>% mutate(across(starts_with("median"), ~ round(., 1)), p = signif(p, 2)), row.names = FALSE)
+cat("\nPost-incubation DOC and nitrate, dry vs wet (Mann-Whitney):\n")
+print(mw_chem %>% mutate(across(starts_with("median"), ~ round(., 2)), p = signif(p, 2)), row.names = FALSE)
 cat("\nRefits with DO >= 2 mg/L only (Km = 0.2) compared with all readings:\n")
 print(refit_tests %>% mutate(across(starts_with("p_"), ~ signif(., 2))), row.names = FALSE)
 cat("\nH2: burned - control difference in Vmax (mg O2 kg-1 h-1), previously dry vs wet (bootstrap 95% CI):\n")
 print(h2 %>% select(Km_mg_L, difference_dry, difference_wet, interaction, CI_low, CI_high, CI_excludes_0) %>%
+        mutate(across(where(is.numeric), ~ round(., 2))), row.names = FALSE)
+cat("\nH2: burned - control difference in measured total O2 (mg O2 kg-1 h-1), previously dry vs wet (bootstrap 95% CI):\n")
+print(h2_o2 %>% select(difference_dry, difference_wet, interaction, CI_low, CI_high, CI_excludes_0) %>%
         mutate(across(where(is.numeric), ~ round(., 2))), row.names = FALSE)

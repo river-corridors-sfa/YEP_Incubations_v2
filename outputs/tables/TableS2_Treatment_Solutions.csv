@@ -1,0 +1,4 @@
+"Treatment","DOC (mg C L-1)","TDN (mg N L-1)","Cl (mg L-1)","SO4 (mg L-1)","NO3-N (mg N L-1)","Ca (mg L-1)","Mg (mg L-1)","K (mg L-1)","Na (mg L-1)","FT-ICR formulas, mean (SD), n = 3","AI_mod (intensity-weighted), mean (SD)","NOSC (intensity-weighted), mean (SD)"
+"Control",0.29,1.73,48.2,9.78,1.73,25.5,6.8,1.18,34.7,"n.a.","n.a.","n.a."
+"Unburned DOM",9.48,1.96,46.5,9.4,1.64,18.4,4.87,1.72,24.4,"2193 (647)","0.167 (0.004)","-0.822 (0.034)"
+"Burned DOM",9.28,1.93,43.2,23,1.46,18.5,5.1,72.8,23.8,"2554 (764)","0.268 (0.011)","-0.524 (0.018)"
