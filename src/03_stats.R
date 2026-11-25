@@ -45,8 +45,6 @@
 #   (does not depend on Km). H2 predicts that burned DOM increases total O2
 #   consumption more in previously dry than in wet sediments.
 #
-# The linear-model version of Part B (reviewed in November 2026) is in
-# Archive/2026-11_treatment_linear_model_reviewed/.
 #
 # Inputs : data_files$rates, data_files$npoc_tn, data_files$ions,
 #          outputs/modeling/YEP_BestFit_AllKm.csv, YEP_BestFit_DOabove2_Km0.2.csv
