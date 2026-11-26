@@ -20,7 +20,8 @@
 #     Dunn's tests after Kruskal-Wallis)
 #   - dispersion (betadisper / PERMDISP), reported alongside the Wd* tests
 #   - mean Bray-Curtis dissimilarity of each wet treatment to the previously dry
-#     samples (used in the Results text)
+#     samples, and per wet sample with a Kruskal-Wallis + Dunn test among DOM
+#     treatments (used in the Results text)
 #   - intensity-weighted mean AI_mod and NOSC per sample (table)
 #   - Figure 3: (a) AI_mod and (b) NOSC by DOM treatment within each
 #     history (Kruskal-Wallis, Dunn letters), (c) NMDS
@@ -38,7 +39,8 @@
 #          outputs/fticr/fticr_formula_filter_log.csv, fticr_formula_filter_per_sample.csv,
 #          fticr_sample_counts.csv, fticr_nmds_site_scores.csv, fticr_nmds_stress.csv,
 #          fticr_wds_tests.csv, fticr_tw2_pairwise.csv, fticr_betadisper.csv,
-#          fticr_mean_distance_to_dry.csv, fticr_chemistry_per_sample.csv,
+#          fticr_mean_distance_to_dry.csv, fticr_wet_distance_to_dry_per_sample.csv,
+#          fticr_wet_distance_to_dry_tests.csv, fticr_chemistry_per_sample.csv,
 #          fticr_chemistry_by_group.csv, fticr_chemistry_tests.csv
 # =============================================================================
 
@@ -335,6 +337,27 @@ distance_to_dry <- sample_info %>%
   select(Group, Moisture, Treatment, Mean_BC_to_dry)
 print(distance_to_dry)
 write_csv(distance_to_dry, file.path(out_dir, "fticr_mean_distance_to_dry.csv"))
+
+## Per wet sample: mean Bray-Curtis dissimilarity to all previously dry samples,
+## then a test among DOM treatments (Kruskal-Wallis, then Dunn's test for every
+## pair with no p adjustment, interpreted only if Kruskal-Wallis p < 0.05; same
+## approach as elsewhere in the paper). The group means of these values equal
+## the wet rows of fticr_mean_distance_to_dry.csv.
+wet_distance_to_dry <- sample_info %>%
+  filter(Moisture == "Wet") %>%
+  transmute(Sample_Name, Treatment, Incubation_Day,
+            BC_to_dry = rowMeans(bc_mat[Sample_Name, dry_samples, drop = FALSE]))
+write_csv(wet_distance_to_dry, file.path(out_dir, "fticr_wet_distance_to_dry_per_sample.csv"))
+
+kw_dist <- kruskal.test(BC_to_dry ~ Treatment, data = wet_distance_to_dry)
+dunn_dist <- rstatix::dunn_test(wet_distance_to_dry, BC_to_dry ~ Treatment, p.adjust.method = "none")
+wet_distance_tests <- tibble(
+  KW_H = unname(kw_dist$statistic), KW_p = kw_dist$p.value,
+  Treatment_1 = dunn_dist$group1, Treatment_2 = dunn_dist$group2,
+  Dunn_Z = dunn_dist$statistic, Dunn_p = dunn_dist$p,
+  significant = kw_dist$p.value < 0.05 & dunn_dist$p < 0.05)
+print(wet_distance_tests)
+write_csv(wet_distance_tests, file.path(out_dir, "fticr_wet_distance_to_dry_tests.csv"))
 
 
 # Create Plot Labels ----

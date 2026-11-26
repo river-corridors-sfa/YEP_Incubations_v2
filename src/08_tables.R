@@ -12,12 +12,19 @@
 # Table S3 [S2]: treatment solutions: DOC, TDN, ions, and FT-ICR MS
 #            intensity-weighted AI_mod and NOSC of the solutions as added
 #            -> TableS3_Treatment_Solutions.csv
-#               (per-sample FT-ICR values: TableS3_support_Solution_FTICR_per_sample.csv)
+#               (per-sample FT-ICR values: TableSX_support_Solution_FTICR_per_sample.csv)
 # Table S4 [S5]: median (IQR) of each response by sediment history x
 #            treatment (rank-based tests -> medians); nitrate per kg dry
 #            sediment; asterisks for every dry vs wet Mann-Whitney test.
 #            -> TableS4_Group_Medians.csv
 #               (mean (SD) version for reference: TableS4_Group_Means_reference.csv)
+# Table S5 [new 25 Nov 2026]: H2 bootstrap test. Burned - control difference
+#            in median total O2 and Vmax (Km 0.13-1.22) in each history, the
+#            dry - wet difference and its 95% bootstrap CI (from 03_stats.R)
+#            -> TableS5_H2_Bootstrap.csv
+# Table S6 [new 25 Nov 2026]: DOM treatment tests within each history by Km:
+#            Kruskal-Wallis p, Dunn's test p where it is significant, and the
+#            DO >= 2 refit -> TableS6_Treatment_Tests_byKm.csv
 # Data S1  : model fits for every vial at the seven Sihi-range Km values
 #            discussed in the paper (least squares + MCMC; Supplementary Data CSV)
 #            -> DataS1_Model_Fits_AllKm.csv
@@ -25,7 +32,9 @@
 #            solution vs water-extractable OC, and the share of post-incubation
 #            DOC above the controls -> Supporting_Carbon_Added_vs_WEOC.csv
 #
-# Inputs : outputs/stats/microcosm_responses.csv, MannWhitney_*.csv (03_stats.R)
+# Inputs : outputs/stats/microcosm_responses.csv, MannWhitney_*.csv,
+#          Bootstrap_Interaction_*.csv, KruskalWallis_Treatment_byKm.csv,
+#          Dunn_Treatment_byKm.csv, DOabove2_Refit_Tests.csv (03_stats.R)
 #          outputs/modeling/YEP_DataPrep_Log.csv, YEP_BestFit_AllKm.csv (01)
 #          outputs/modeling/YEP_MCMC_Summary.csv (02)
 #          data_files$water_mass, data_files$npoc_tn, data_files$ions,
@@ -161,7 +170,7 @@ solution_chem <- data.frame(
   n_formulas   = colSums(icr_int > 0),
   AI_mod_wmean = colSums(icr_rel * mol$AI_Mod[keep]),
   NOSC_wmean   = colSums(icr_rel * mol$NOSC[keep]))
-write.csv(solution_chem, file.path(out_dir, "TableS3_support_Solution_FTICR_per_sample.csv"), row.names = FALSE)
+write.csv(solution_chem, file.path(out_dir, "TableSX_support_Solution_FTICR_per_sample.csv"), row.names = FALSE)
 solution_chem_sum <- solution_chem %>% group_by(Treatment) %>%
   summarize(`FT-ICR formulas, mean (SD), n = 3` = mean_sd(n_formulas, 0),
             `AI_mod (intensity-weighted), mean (SD)` = mean_sd(AI_mod_wmean, 3),
@@ -358,5 +367,97 @@ tableS4_mean <- build_s4(mean_sd) %>% add_stars() %>% table_names()
 write.csv(tableS4,      file.path(out_dir, "TableS4_Group_Medians.csv"), row.names = FALSE)
 write.csv(tableS4_mean, file.path(out_dir, "TableS4_Group_Means_reference.csv"), row.names = FALSE)
 
+# ---- Table S5: H2 bootstrap, burned - control difference by history ---------
+# From 03_stats.R parts D and D2. For each inundation history, burned - control
+# = median of the 5 burned microcosms - median of the 5 controls. The
+# interaction (dry difference - wet difference) is > 0 if burned DOM raised O2
+# consumption more in previously dry sediments (H2). 95% percentile bootstrap
+# CI, 10,000 resamples of the 5 microcosms in each of the 4 groups.
+# Rows: measured total O2 consumption (no Km), then Vmax at each Km in the
+# Sihi et al. (2020) range (Km_paper, as in Data S1).
+boot_o2   <- read.csv(file.path("outputs", "stats", "Bootstrap_Interaction_TotalO2.csv")) %>%
+  mutate(Km_mg_L = NA_real_)
+boot_vmax <- read.csv(file.path("outputs", "stats", "Bootstrap_Interaction_Vmax_byKm.csv")) %>%
+  filter(round(Km_mg_L, 2) %in% Km_paper)
+stopifnot(nrow(boot_o2) == 1, nrow(boot_vmax) == length(Km_paper))
+fmt1 <- function(x) sprintf("%.1f", x)
+tableS5 <- bind_rows(boot_o2, boot_vmax) %>%
+  transmute(`Response (mg O2 kg-1 h-1)` = ifelse(Response == "O2_rate_mg_kg_h",
+                                                 "Total O2 consumption (measured)", "Vmax (model)"),
+            `Km (mg/L)` = ifelse(is.na(Km_mg_L), "n.a.", as.character(Km_mg_L)),
+            `Previously dry: control median` = fmt1(median_dry_control),
+            `Previously dry: burned DOM median` = fmt1(median_dry_burned),
+            `Previously dry: burned - control` = fmt1(difference_dry),
+            `Wet: control median` = fmt1(median_wet_control),
+            `Wet: burned DOM median` = fmt1(median_wet_burned),
+            `Wet: burned - control` = fmt1(difference_wet),
+            `Dry difference - wet difference` = fmt1(interaction),
+            `95% bootstrap CI` = paste(fmt1(CI_low), "to", fmt1(CI_high)),
+            `CI excludes 0` = ifelse(CI_excludes_0, "yes", "no"))
+write.csv(tableS5, file.path(out_dir, "TableS5_H2_Bootstrap.csv"), row.names = FALSE)
+
+# ---- Table S6: DOM treatment tests by Km (Kruskal-Wallis, Dunn) -------------
+# From 03_stats.R part B (and C2 for the DO >= 2 mg/L refit). Within each
+# inundation history, n = 5 microcosms per treatment. One row per response x
+# history x run of Km values (Sihi range, Km_paper; total O2 has no Km):
+#   - Kruskal-Wallis p among the three DOM treatments (* = p < 0.05)
+#   - Dunn's test p (no adjustment) only where Kruskal-Wallis p < 0.05,
+#     because pairs are interpreted only there
+# Neighbouring Km values are merged into one row when the outcome is the same:
+# identical p values where Kruskal-Wallis is significant, or all
+# non-significant (then the p range is shown). "n.t." = not tested (kL zero in
+# every microcosm of all three treatments).
+kw_all   <- read.csv(file.path("outputs", "stats", "KruskalWallis_Treatment_byKm.csv"))
+dunn_all <- read.csv(file.path("outputs", "stats", "Dunn_Treatment_byKm.csv"))
+refit    <- read.csv(file.path("outputs", "stats", "DOabove2_Refit_Tests.csv"))
+fmt_p <- function(p) ifelse(is.na(p), "n.t.",
+                            paste0(ifelse(p < 0.001, "<0.001", sprintf("%.3f", p)), ifelse(!is.na(p) & p < 0.05, "*", "")))
+resp_name <- c(O2_rate_mg_kg_h = "Total O2 consumption (measured)",
+               Vmax_mg_kg_h = "Vmax (model)", kL_L_kg_h = "kL (model)")
+pairs <- c("Control vs Unburned DOM", "Control vs Burned DOM", "Unburned DOM vs Burned DOM")
+
+dunn_wide <- dunn_all %>%
+  mutate(Pair = paste(Treatment_1, "vs", Treatment_2), p_txt = fmt_p(p)) %>%
+  select(Response, Moisture, Km_mg_L, Pair, p_txt) %>%
+  pivot_wider(names_from = Pair, values_from = p_txt)
+stopifnot(all(pairs %in% names(dunn_wide)))
+
+s6_cells <- kw_all %>%
+  filter(is.na(Km_mg_L) | round(Km_mg_L, 2) %in% Km_paper) %>%
+  left_join(dunn_wide, by = c("Response", "Moisture", "Km_mg_L")) %>%
+  mutate(sig = !is.na(p) & p < 0.05,
+         across(all_of(pairs), ~ ifelse(sig, ., "")),
+         # cells with the same key are merged when they are neighbours
+         key = case_when(is.na(p) ~ "n.t.", !sig ~ "ns",
+                         TRUE ~ paste(fmt_p(p), .data[[pairs[1]]], .data[[pairs[2]]], .data[[pairs[3]]]))) %>%
+  arrange(factor(Response, levels = names(resp_name)), Moisture, Km_mg_L) %>%
+  group_by(Response, Moisture) %>%
+  mutate(run = cumsum(key != lag(key, default = ""))) %>%
+  ungroup()
+
+km_range <- function(k) {
+  k <- round(k, 2)
+  if (all(is.na(k))) "n.a." else if (length(k) == 1) as.character(k) else paste0(min(k), "-", max(k))
+}
+p_range <- function(p, key) {
+  if (key[1] == "n.t.") return("n.t.")
+  if (length(p) == 1 || key[1] != "ns" || sprintf("%.3f", min(p)) == sprintf("%.3f", max(p))) return(fmt_p(p[1]))
+  paste0(sprintf("%.3f", min(p)), "-", sprintf("%.3f", max(p)))
+}
+tableS6 <- s6_cells %>%
+  group_by(Response, Moisture, run) %>%
+  summarize(`Km (mg/L)` = km_range(Km_mg_L), `Kruskal-Wallis p` = p_range(p, key),
+            across(all_of(pairs), first), .groups = "drop") %>%
+  mutate(Response = resp_name[Response],
+         History = ifelse(Moisture == "Dry", "Previously dry", "Wet")) %>%
+  select(Response, History, `Km (mg/L)`, `Kruskal-Wallis p`, all_of(pairs))
+
+refit_row <- refit %>% filter(Parameter == "kL_L_kg_h", Moisture == "Wet", grepl("Kruskal", Test))
+stopifnot(nrow(refit_row) == 1, refit_row$p_DO_above_2 >= 0.05)
+tableS6 <- bind_rows(tableS6, tibble(Response = "kL (model), fit to DO >= 2 mg/L only", History = "Wet",
+                                     `Km (mg/L)` = "0.2", `Kruskal-Wallis p` = fmt_p(refit_row$p_DO_above_2),
+                                     !!pairs[1] := "", !!pairs[2] := "", !!pairs[3] := ""))
+write.csv(tableS6, file.path(out_dir, "TableS6_Treatment_Tests_byKm.csv"), row.names = FALSE)
+
 options(width = 200)
-print(tableS1); print(tableS3); print(tableS4); print(carbon_added)
+print(tableS1); print(tableS3); print(tableS4); print(tableS5); print(tableS6); print(carbon_added)
